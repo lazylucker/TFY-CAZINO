@@ -3,13 +3,16 @@ import time
 
 # Ежедневный бонус
 def daily_bonus(user_id, message):
-    cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
-    user = cursor.fetchone()
+    cursor.execute('SELECT last_claim FROM users WHERE user_id = ?', (user_id,))
+    last_claim = cursor.fetchone()[0]
 
-    if user:
-        last_claim = user[6]
-        current_time = time.time()
-
+    if time.time() - last_claim > 86400:  # Проверка на 24 часа
+        bonus = 20  # Сумма ежедневного бонуса
+        cursor.execute('UPDATE users SET balance = balance + ?, last_claim = ? WHERE user_id = ?', (bonus, time.time(), user_id))
+        conn.commit()
+        bot.send_message(message.chat.id, f"Ты получил ежедневный бонус: {bonus} TFY COINS.")
+    else:
+        bot.send_message(message.chat.id, "Ты уже забрал бонус сегодня. Вернись завтра.")
         # Проверяем, был ли запрос на бонус в течение 24 часов
         if current_time - last_claim >= 86400:  # 86400 секунд = 24 часа
             bonus = random.randint(10, 100)  # Случайный бонус от 10 до 100 TFY COINS
@@ -74,18 +77,15 @@ def start_tournament():
         tournament_active = False
 
 # Обмен валюты
-def exchange_currency(user_id, message, exchange_amount):
-    cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
-    user = cursor.fetchone()
+def exchange_currency(user_id, message, amount):
+    cursor.execute('SELECT balance FROM users WHERE user_id = ?', (user_id,))
+    user_balance = cursor.fetchone()
 
-    if user:
-        balance = user[2]
-        if balance >= exchange_amount:
-            bonus = exchange_amount * 0.8  # Обмен с комиссией 20%
-            cursor.execute('UPDATE users SET balance = balance - ?, bonus_balance = bonus_balance + ? WHERE user_id = ?', (exchange_amount, bonus, user_id))
-            conn.commit()
-            bot.send_message(message.chat.id, f"Ты обменял {exchange_amount} TFY COINS на {bonus} TFY COINS бонуса!")
-        else:
-            bot.send_message(message.chat.id, "У тебя недостаточно монет для обмена.")
+    if user_balance and user_balance[0] >= amount:
+        # Пример обмена на бонусы
+        bonus = amount * 1.5  # Обмен 1.5x
+        cursor.execute('UPDATE users SET balance = balance - ? WHERE user_id = ?', (amount, user_id))
+        conn.commit()
+        bot.send_message(message.chat.id, f"Ты обменял {amount} TFY COINS на {bonus} бонусных TFY COINS.")
     else:
-        bot.send_message(message.chat.id, "Ты не зарегистрирован в системе. Напиши /start, чтобы начать.")
+        bot.send_message(message.chat.id, "У тебя недостаточно TFY COINS для обмена.")
