@@ -1,96 +1,81 @@
 import random
-from telebot import types
 import sqlite3
+from time import time
 
 # Подключение к базе данных
 conn = sqlite3.connect('TFY_CASINO.db', check_same_thread=False)
 cursor = conn.cursor()
 
-# Игровые механики
-
-# Слоты
-def slots_game(user_id, message):
+# Обмен валюты
+def exchange_coins(user_id, amount, message):
     cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
     user = cursor.fetchone()
 
     if user:
-        if user[2] >= 10:  # Минимальная ставка 10 TFY COINS
-            bet = 10
-            result = random.choice(['7', '7', '7', 'X', 'X', 'X', 'BAR', 'BAR', '777', 'JACKPOT'])
-            cursor.execute('UPDATE users SET balance = balance - ? WHERE user_id = ?', (bet, user_id))
+        if user[2] >= amount:  # Если достаточно монет
+            cursor.execute('UPDATE users SET balance = balance - ? WHERE user_id = ?', (amount, user_id))
+            cursor.execute('UPDATE users SET special_bonus = special_bonus + ? WHERE user_id = ?', (amount, user_id))
             conn.commit()
-
-            if result == 'JACKPOT':
-                winnings = random.randint(100, 500)
-                cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (winnings, user_id))
-                conn.commit()
-                bot.send_message(message.chat.id, f"🎰 Ты поймал JACKPOT! Получаешь {winnings} TFY COINS! Твой баланс: {user[2] + winnings} TFY COINS.")
-            else:
-                bot.send_message(message.chat.id, f"🎰 Результат: {result}! Ты проиграл {bet} TFY COINS. Твой баланс: {user[2] - bet} TFY COINS.")
+            bot.send_message(message.chat.id, f"✅ Ты обменял {amount} TFY COINS на бонусы! Теперь у тебя {user[2] - amount} TFY COINS и {user[7] + amount} бонусных монет.")
         else:
-            bot.send_message(message.chat.id, "Недостаточно средств для ставки. Минимальная ставка — 10 TFY COINS.")
+            bot.send_message(message.chat.id, "У тебя недостаточно монет для обмена.")
     else:
         bot.send_message(message.chat.id, "Ты не зарегистрирован в системе. Напиши /start, чтобы начать.")
 
-# Блэкджек
-def blackjack_game(user_id, message):
+# Тайный спонсор
+def secret_sponsor(user_id, message):
     cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
     user = cursor.fetchone()
 
     if user:
-        if user[2] >= 20:  # Минимальная ставка 20 TFY COINS
-            bet = 20
-            player_hand = random.sample(range(1, 12), 2)
-            dealer_hand = random.sample(range(1, 12), 2)
-            player_sum = sum(player_hand)
-            dealer_sum = sum(dealer_hand)
-
-            cursor.execute('UPDATE users SET balance = balance - ? WHERE user_id = ?', (bet, user_id))
+        # С вероятностью 10% пользователю выдается подарок от тайного спонсора
+        if random.random() < 0.1:
+            bonus = random.randint(50, 200)  # Случайный бонус
+            cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (bonus, user_id))
             conn.commit()
-
-            if player_sum == 21:
-                winnings = bet * 2
-                cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (winnings, user_id))
-                conn.commit()
-                bot.send_message(message.chat.id, f"💥 Ты набрал 21! Победа! Получаешь {winnings} TFY COINS. Твой баланс: {user[2] + winnings} TFY COINS.")
-            elif player_sum > 21:
-                bot.send_message(message.chat.id, f"❌ Перебор! Ты проиграл {bet} TFY COINS. Твой баланс: {user[2] - bet} TFY COINS.")
-            else:
-                if dealer_sum == 21:
-                    bot.send_message(message.chat.id, f"😱 Дилер набрал 21! Ты проиграл {bet} TFY COINS. Твой баланс: {user[2] - bet} TFY COINS.")
-                else:
-                    bot.send_message(message.chat.id, f"🤔 У тебя: {player_sum}, у дилера: {dealer_sum}. Играй дальше или бросай ставки!")
+            bot.send_message(message.chat.id, f"🎉 Тайный спонсор подарил тебе {bonus} TFY COINS! Везет!")
         else:
-            bot.send_message(message.chat.id, "Недостаточно средств для ставки. Минимальная ставка — 20 TFY COINS.")
+            bot.send_message(message.chat.id, "Тайный спонсор сегодня молчит. Попробуй позже.")
     else:
         bot.send_message(message.chat.id, "Ты не зарегистрирован в системе. Напиши /start, чтобы начать.")
 
-# Рулетка
-def roulette_game(user_id, message):
+# Режим "ALL IN" (все ставки на кон)
+def all_in(user_id, message):
     cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
     user = cursor.fetchone()
 
     if user:
-        if user[2] >= 10:  # Минимальная ставка 10 TFY COINS
-            bet = 10
-            result = random.choice(['Красное', 'Черное', 'Зеро'])
-            cursor.execute('UPDATE users SET balance = balance - ? WHERE user_id = ?', (bet, user_id))
-            conn.commit()
+        if user[2] > 0:  # Если есть хотя бы 1 монета для ставки
+            bet_amount = user[2]  # Ставим все монеты
+            outcome = random.choice(['win', 'lose'])
 
-            if result == 'Красное':
-                winnings = bet * 2
-                cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (winnings, user_id))
+            if outcome == 'win':
+                cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (bet_amount * 2, user_id))
                 conn.commit()
-                bot.send_message(message.chat.id, f"🔴 Рулетка: ты выбрал красное и выиграл! Получаешь {winnings} TFY COINS. Твой баланс: {user[2] + winnings} TFY COINS.")
-            elif result == 'Черное':
-                winnings = bet * 2
-                cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (winnings, user_id))
-                conn.commit()
-                bot.send_message(message.chat.id, f"⚫️ Рулетка: ты выбрал черное и выиграл! Получаешь {winnings} TFY COINS. Твой баланс: {user[2] + winnings} TFY COINS.")
+                bot.send_message(message.chat.id, f"🔥 Ты выиграл ставку ALL IN! Баланс удвоен! У тебя теперь {user[2] * 2} TFY COINS.")
             else:
-                bot.send_message(message.chat.id, f"🟢 Рулетка: зеро. Ты проиграл {bet} TFY COINS. Твой баланс: {user[2] - bet} TFY COINS.")
+                cursor.execute('UPDATE users SET balance = 0 WHERE user_id = ?', (user_id,))
+                conn.commit()
+                bot.send_message(message.chat.id, f"💔 Ты проиграл ставку ALL IN. Все монеты потеряны.")
         else:
-            bot.send_message(message.chat.id, "Недостаточно средств для ставки. Минимальная ставка — 10 TFY COINS.")
+            bot.send_message(message.chat.id, "У тебя недостаточно монет для ставки ALL IN.")
     else:
         bot.send_message(message.chat.id, "Ты не зарегистрирован в системе. Напиши /start, чтобы начать.")
 
+# Система комбо-выигрышей
+def combo_bonus(user_id, message):
+    cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+    user = cursor.fetchone()
+
+    if user:
+        # Проверка на серию побед
+        if user[4] >= 3:  # Если игрок выиграл 3 раза подряд
+            bonus = random.randint(100, 500)
+            cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (bonus, user_id))
+            cursor.execute('UPDATE users SET streak = 0 WHERE user_id = ?', (user_id))  # Сбросить серию
+            conn.commit()
+            bot.send_message(message.chat.id, f"🔥 Ты в комбо-выигрыше! Получаешь {bonus} TFY COINS за серию побед!")
+        else:
+            bot.send_message(message.chat.id, "Ты еще не в серии побед. Попробуй выиграть несколько раз подряд.")
+    else:
+        bot.send_message(message.chat.id, "Ты не зарегистрирован в системе. Напиши /start, чтобы начать.")
