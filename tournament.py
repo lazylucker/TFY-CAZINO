@@ -1,24 +1,50 @@
 import random
 import time
 
-# Запуск турнира
-def start_tournament():
-    cursor.execute('SELECT * FROM users ORDER BY balance DESC LIMIT 10')
-    top_players = cursor.fetchall()
+# Турниры
+def start_tournament(message):
+    cursor.execute('SELECT COUNT(*) FROM users')
+    total_players = cursor.fetchone()[0]
 
-    if len(top_players) < 2:
-        return "Недостаточно игроков для турнира."
+    if total_players < 2:
+        bot.send_message(message.chat.id, "Нужно как минимум 2 игрока для начала турнира.")
+        return
 
-    tournament_pot = sum(player[2] for player in top_players)  # Сумма всех монет в банке турнира
-    winner = random.choice(top_players)  # Случайный выбор победителя из ТОП-10
-    winner_id = winner[0]
-    prize = tournament_pot * 0.8  # 80% банка идет победителю
+    tournament_prize_pool = 1000  # Призовой фонд турнира
+    bot.send_message(message.chat.id, f"Турнир начался! Призовой фонд: {tournament_prize_pool} TFY COINS.")
 
-    cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (prize, winner_id))
-    conn.commit()
+    # Выбираем случайных игроков для участия в турнире
+    cursor.execute('SELECT user_id FROM users')
+    players = cursor.fetchall()
+    random.shuffle(players)
+    tournament_players = players[:min(10, len(players))]  # Ограничиваем 10 игроками
 
-    return f"Турнир завершен! Победитель: {winner[1]}, он забирает {prize} TFY COINS."
+    # Распределение призового фонда
+    prize_distribution = [int(tournament_prize_pool * 0.5), int(tournament_prize_pool * 0.3), int(tournament_prize_pool * 0.2)]
 
+    # Отправляем сообщение игрокам
+    for player in tournament_players:
+        bot.send_message(player[0], f"Ты участвуешь в турнире! Призовой фонд — {tournament_prize_pool} TFY COINS.")
+    
+    # Определяем победителей случайным образом
+    winners = random.sample(tournament_players, 3)
+    
+    # Раздаем призы
+    for i, winner in enumerate(winners):
+        prize = prize_distribution[i]
+        cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (prize, winner[0]))
+        conn.commit()
+        bot.send_message(winner[0], f"Ты выиграл турнир и получил {prize} TFY COINS!")
+
+# Проверка турнира
+def check_tournament(message):
+    cursor.execute('SELECT * FROM tournaments WHERE status = "active"')
+    active_tournament = cursor.fetchone()
+
+    if active_tournament:
+        bot.send_message(message.chat.id, "Турнир уже активен!")
+    else:
+        start_tournament(message)
 # Квесты
 def daily_quest(user_id, message):
     cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
